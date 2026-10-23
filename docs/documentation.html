@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Записване за изпити с Azure Service Bus</title>
+<style>
+  :root {
+    --text: #000000;
+    --text-2: #333333;
+    --rule: #000000;
+    --rule-light: #bdbdbd;
+    --code-bg: #f4f4f4;
+  }
+  /* A4; ляво поле 3 cm (подвързване), дясно 2 cm, горе/долу 2,5 cm; номер на страницата долу в средата. */
+  @page {
+    size: A4;
+    margin: 25mm 20mm 25mm 30mm;
+    @bottom-center { content: counter(page); font-family: "Times New Roman", Times, serif; font-size: 11pt; }
+  }
+  @page :first { @bottom-center { content: none; } }
+
+  html { background: #ffffff; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.5; color: var(--text);
+         background: #ffffff; max-width: 820px; margin: 0 auto; padding: 0 16px; }
+
+  h1, h2, h3 { font-family: "Times New Roman", Times, serif; color: var(--text); break-after: avoid; }
+  h2 { font-size: 14pt; font-weight: 700; margin: 18pt 0 6pt; }
+  h3 { font-size: 12pt; font-weight: 700; margin: 12pt 0 6pt; }
+  p { margin: 0 0 6pt; text-align: justify; text-indent: 1.25cm; hyphens: auto; orphans: 3; widows: 3; }
+  li > p, td p, .caption, figcaption { text-indent: 0; }
+  ul, ol { margin: 0 0 6pt; padding-left: 1.25cm; text-align: justify; }
+  li { margin: 0 0 2pt; }
+
+  code, pre { font-family: "Courier New", Menlo, Consolas, monospace; }
+  code { font-size: 10.5pt; background: var(--code-bg); padding: 0 2px; }
+  pre { font-size: 9.5pt; line-height: 1.25; background: var(--code-bg); border: 1px solid var(--rule-light);
+        padding: 6pt 8pt; margin: 0 0 10pt; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+
+  /* Таблици: надпис отгоре, тънки линии, 11 pt */
+  table { border-collapse: collapse; width: 100%; margin: 0 0 12pt; font-size: 11pt; line-height: 1.3; break-inside: avoid; }
+  th, td { border: 1px solid var(--rule-light); padding: 3pt 5pt; text-align: left; vertical-align: top; }
+  th { font-weight: 700; background: #f2f2f2; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td code, th code { font-size: 10pt; overflow-wrap: anywhere; }
+  table.fixed { table-layout: fixed; }
+
+  /* Надписи: „Таблица N.“ над таблицата, „Фиг. N.“ под фигурата, „Листинг N.“ над кода */
+  .caption { font-size: 11pt; text-align: center; margin: 10pt 0 4pt; break-after: avoid; }
+  .caption b { font-weight: 700; }
+  figure { margin: 8pt 0 12pt; break-inside: avoid; }
+  figure img { width: 88%; height: auto; display: block; margin: 0 auto; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { font-size: 11pt; text-align: center; margin-top: 4pt; line-height: 1.3; }
+  .two { display: block; }
+
+  /* Заглавна страница */
+  .cover { min-height: 245mm; display: flex; flex-direction: column; justify-content: space-between;
+           text-align: center; break-after: page; }
+  .cover p { text-indent: 0; text-align: center; margin: 0; }
+  .cover .logo { width: 30mm; height: auto; margin: 0 auto 6pt; display: block; }
+  .cover .uni { font-size: 14pt; font-weight: 700; letter-spacing: 0.03em; }
+  .cover .faculty { font-size: 12pt; }
+  .cover .kind { font-size: 20pt; font-weight: 700; letter-spacing: 0.12em; margin-bottom: 10pt; }
+  .cover .discipline { font-size: 14pt; margin-bottom: 14pt; }
+  .cover .topic-label { font-size: 12pt; }
+  .cover .title { font-size: 16pt; font-weight: 700; line-height: 1.3; margin: 4pt 10mm 8pt; }
+  .cover .sub { font-size: 12pt; font-style: italic; }
+  .cover .people { display: flex; justify-content: space-between; text-align: left; font-size: 12pt; line-height: 1.6; }
+  .cover .place { font-size: 12pt; margin-top: 18mm; }
+
+  /* Съдържание */
+  .toc h2 { text-align: center; }
+  .toc ol { list-style: none; padding-left: 0; margin: 0; }
+  .toc li { margin: 0 0 3pt; }
+  .toc ol ol { padding-left: 1cm; }
+
+  .pb { break-before: page; }
+  .small { font-size: 10.5pt; text-indent: 0; }
+  @media (max-width: 640px) { .cover .people { flex-direction: column; gap: 10pt; } }
+  @media print { body { max-width: none; padding: 0; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div>
+    <img class="logo" src="figures/tu-sofia-logo.svg" alt="Лого на Технически университет – София">
+    <p class="uni">ТЕХНИЧЕСКИ УНИВЕРСИТЕТ – СОФИЯ</p>
+    <p class="faculty">Факултет по компютърни системи и технологии</p>
+  </div>
+  <div>
+    <p class="kind">КУРСОВ ПРОЕКТ</p>
+    <p class="discipline">по дисциплината „Програмиране в разпределени среди“</p>
+    <p class="topic-label">на тема:</p>
+    <p class="title">Messaging комуникация между микроуслуги с Azure Service Bus и проверка офлайн чрез Azure Service Bus Emulator</p>
+    <p class="sub">Система за записване за изпити<br>(.NET 8, ASP.NET Core, Azure Service Bus, Docker)</p>
+  </div>
+  <div>
+    <div class="people">
+      <div>Изготвил: Максим Ванчев<br>Фак. №: 121223097<br>ФКСТ, КСИ, група 42</div>
+    </div>
+    <p class="place">София, 2026</p>
+  </div>
+</section>
+
+<section class="toc pb">
+  <h2>СЪДЪРЖАНИЕ</h2>
+  <ol>
+  <li>1. Задание</li>
+  <li>2. Теоретична основа</li>
+  <li>3. Архитектура на системата</li>
+  <li>4. Организиране на Local Development (A)</li>
+  <li>5. Response endpoint и HTTP тест (B)</li>
+  <li>6. Създаване и регистриране на опашка (C)</li>
+  <li>7. Логика за изпращане на съобщения (D)</li>
+  <li>8. Логика за получаване на съобщения (E)</li>
+  <li>9. Authentication и Authorization (F)
+    <ol>
+      <li>9.1. Автентикация към Service Bus</li>
+      <li>9.2. Автентикация на HTTP API</li>
+      <li>9.3. Политики за оторизация</li>
+    </ol></li>
+  <li>10. Подкарване на Azure Service Bus Emulator (G)</li>
+  <li>11. Тест чрез Azure Service Bus Emulator (H)
+    <ol>
+      <li>11.1. Автоматизирани интеграционни тестове</li>
+      <li>11.2. Ръчна демонстрация</li>
+    </ol></li>
+  <li>12. Изводи</li>
+  <li>13. Приложение: компилиране и стартиране</li>
+  </ol>
+</section>
+
+<h2 class="pb">1. Задание</h2>
+<p>Темата на проекта е „Приложение на тема по избор“ (вариант 3.1). Изисква се messaging комуникация между няколко микроуслуги на
+.NET чрез <b>Azure Service Bus</b>, като функционалността се проверява <b>офлайн</b> чрез <b>Azure Service Bus Emulator</b>. Целта е
+да се покаже как се създават няколко микроуслуги, които работят заедно.</p>
+<p>Избраната предметна област е <b>записване на студенти за изпити в ТУ – София</b>. Студентът подава заявка през HTTP API. Заявката
+не се обработва синхронно. Тя се изпраща като съобщение в опашка. Отделна услуга я проверява по бизнес правила и публикува
+резултата като събитие. Трета услуга е абонирана за събитията и уведомява студента.</p>
+
+<div class="caption"><b>Таблица 1.</b> Изисквани дейности и тяхната реализация</div>
+<table>
+  <tr><th style="width:8%">№</th><th style="width:38%">Дейност</th><th>Реализация в проекта</th></tr>
+  <tr><td>A</td><td>Организиране на Local Development</td><td>solution с 4 проекта и 2 тестови проекта, конфигурация по среди, user-secrets, скрипт <code>run-all.sh</code></td></tr>
+  <tr><td>B</td><td>Azure response endpoint и HTTP тест</td><td>Minimal API endpoint-и, файл <code>.http</code>, 7 автоматизирани HTTP теста</td></tr>
+  <tr><td>C</td><td>Създаване и регистриране на опашка</td><td>опашка, topic и абонаменти в <code>Config.json</code>; регистриране на клиентите в DI</td></tr>
+  <tr><td>D</td><td>Логика за изпращане на съобщения</td><td><code>ServiceBusRegistrationPublisher</code>, публикуване на резултати в topic</td></tr>
+  <tr><td>E</td><td>Логика за получаване на съобщения</td><td><code>ServiceBusProcessor</code> с PeekLock: Complete / Abandon / DeadLetter</td></tr>
+  <tr><td>F</td><td>Authentication и Authorization Options</td><td>SAS и Options validation за Service Bus; JWT Bearer и две политики за API</td></tr>
+  <tr><td>G</td><td>Подкарване на Azure Service Bus Emulator</td><td><code>docker-compose.yml</code> с емулатор и SQL Server</td></tr>
+  <tr><td>H</td><td>Тест на/чрез емулатора</td><td>4 интеграционни теста и ръчна демонстрация</td></tr>
+  <tr><td>I</td><td>Описание на предните стъпки</td><td>настоящият документ</td></tr>
+</table>
+
+<h2>2. Теоретична основа</h2>
+<p><b>Message Oriented Middleware (MOM)</b> е междинен софтуер, при който приложенията обменят съобщения през посредник (message
+broker), вместо да се извикват директно. Изпращачът не чака получателя (fire-and-forget), а двете страни не знаят една за
+друга (loose coupling). Ако получателят временно не работи, съобщенията го чакат в брокера.</p>
+<p>Има два основни модела. При <b>point-to-point</b> (опашка, queue) всяко съобщение се обработва от точно един получател, обикновено
+по реда на пристигане (FIFO). При <b>publish-subscribe</b> (topic) едно съобщение се доставя на всички абонати. Съобщение, което
+не може да бъде обработено (poison message) или е изтекло, се премества в <b>dead-letter опашка</b> (DLQ), за да не блокира
+останалите.</p>
+<p><b>Azure Service Bus</b> е облачен брокер на Microsoft, който работи по протокола AMQP 1.0. Предлага опашки, topic-и с абонаменти,
+потвърждаване на обработката (PeekLock), откриване на дубликати, DLQ и сесии. <b>Azure Service Bus Emulator</b> е официален
+Docker образ, който предоставя същия AMQP интерфейс локално. Така приложението се разработва и тества без Azure абонамент и
+без интернет.</p>
+<p><b>Микроуслугите</b> са малки, независимо стартирани и разгръщани услуги, всяка със собствена отговорност. Принципът
+„smart endpoints and dumb pipes“ означава, че бизнес логиката е в услугите, а комуникационната инфраструктура само пренася
+съобщенията.</p>
+
+<div class="caption"><b>Таблица 2.</b> Понятия от лекциите и къде се използват в проекта</div>
+<table>
+  <tr><th style="width:38%">Понятие</th><th>Използване в проекта</th></tr>
+  <tr><td>Loose coupling, fire-and-forget</td><td>Api не познава Processor и Notifier, само изпраща съобщение и връща <code>202 Accepted</code></td></tr>
+  <tr><td>Point-to-point (queue)</td><td>опашка <code>exam-registrations</code></td></tr>
+  <tr><td>Publish-subscribe (topic)</td><td>topic <code>registration-events</code> с абонаменти <code>notifications</code> и <code>audit</code></td></tr>
+  <tr><td>Acknowledgement</td><td><code>PeekLock</code> и ръчно <code>CompleteMessageAsync</code></td></tr>
+  <tr><td>Dead letter / poison message</td><td>невалидните съобщения отиват в DLQ; след <code>MaxDeliveryCount = 3</code> неуспешни опита също</td></tr>
+  <tr><td>Duplicate detection</td><td><code>MessageId = RegistrationId</code>, <code>RequiresDuplicateDetection = true</code></td></tr>
+  <tr><td>Smart endpoints + dumb pipes</td><td>правилата за записване са в Processor, а брокерът само пренася</td></tr>
+</table>
+
+<h2>3. Архитектура на системата</h2>
+<p>Системата се състои от три микроуслуги и общ проект с договорите на съобщенията (фиг. 1). Услугите комуникират
+единствено чрез Service Bus и не се извикват директно.</p>
+
+<figure>
+  <img src="figures/architecture.svg" alt="Архитектура на системата">
+  <figcaption><b>Фиг. 1.</b> Архитектура и поток на съобщенията</figcaption>
+</figure>
+
+<div class="caption"><b>Таблица 3.</b> Компоненти на решението</div>
+<table>
+  <tr><th style="width:36%">Проект</th><th>Отговорност</th></tr>
+  <tr><td><code>ExamRegistration.Contracts</code></td><td>съобщения <code>ExamRegistrationRequested</code> и <code>ExamRegistrationProcessed</code>, имена на опашки и topic-и, <code>ServiceBusOptions</code>, каталог с изпити</td></tr>
+  <tr><td><code>ExamRegistration.Api</code></td><td>HTTP endpoint-и, валидация на входа, JWT, изпращане в опашката</td></tr>
+  <tr><td><code>ExamRegistration.Processor</code></td><td>получаване от опашката, бизнес правила, публикуване на резултата в topic</td></tr>
+  <tr><td><code>ExamRegistration.Notifier</code></td><td>абонат на topic-а, симулира имейл до студента</td></tr>
+  <tr><td><code>ExamRegistration.Api.Tests</code></td><td>HTTP тестове на API-то в паметта</td></tr>
+  <tr><td><code>ExamRegistration.IntegrationTests</code></td><td>end-to-end тестове срещу емулатора</td></tr>
+</table>
+
+<p>Последователността при едно записване е следната:</p>
+<ol>
+  <li>Клиентът изпраща <code>POST /api/registrations</code> с JWT токен.</li>
+  <li>Api валидира данните, изпраща <code>ExamRegistrationRequested</code> в опашката и връща <code>202 Accepted</code>.</li>
+  <li>Processor получава съобщението, проверява правилата и публикува <code>ExamRegistrationProcessed</code> (Accepted или Rejected) в topic-а.</li>
+  <li>Notifier получава събитието от абонамента <code>notifications</code> и „изпраща имейл“.</li>
+</ol>
+
+<h2>4. Организиране на Local Development (A)</h2>
+<p>Използвани инструменти: .NET SDK 8, Docker Desktop (macOS, Apple Silicon), Visual Studio Code / Rider. Решението е
+създадено с командния ред на .NET (листинг 1).</p>
+
+<div class="caption"><b>Листинг 1.</b> Създаване на решението</div>
+<pre>dotnet new sln -n ExamRegistration
+dotnet new classlib -n ExamRegistration.Contracts -o src/ExamRegistration.Contracts
+dotnet new web      -n ExamRegistration.Api       -o src/ExamRegistration.Api
+dotnet new worker   -n ExamRegistration.Processor -o src/ExamRegistration.Processor
+dotnet new worker   -n ExamRegistration.Notifier  -o src/ExamRegistration.Notifier
+dotnet new xunit    -n ExamRegistration.Api.Tests -o tests/ExamRegistration.Api.Tests
+dotnet new xunit    -n ExamRegistration.IntegrationTests -o tests/ExamRegistration.IntegrationTests
+dotnet sln add src/*/*.csproj tests/*/*.csproj</pre>
+
+<p>Използвани NuGet пакети: <code>Azure.Messaging.ServiceBus</code> (клиент), <code>Microsoft.Extensions.Azure</code> (интеграция с
+dependency injection), <code>Microsoft.AspNetCore.Authentication.JwtBearer</code>, <code>Microsoft.AspNetCore.Mvc.Testing</code> и xUnit.</p>
+<p>Конфигурацията е разделена по среди: <code>appsettings.json</code> съдържа общите настройки, а <code>appsettings.Development.json</code>
+съдържа connection string към емулатора. Ключът за подписване на JWT се пази в <b>user-secrets</b> извън хранилището.
+<code>launchSettings.json</code> фиксира адреса на API-то на <code>http://localhost:5080</code>. Скриптът <code>run-all.sh</code> стартира
+емулатора, изчаква го да е готов и пуска трите услуги.</p>
+<p>Интернет е нужен само веднъж, за изтегляне на Docker образите и NuGet пакетите. След това разработката и тестването
+работят без мрежа.</p>
+
+<h2>5. Response endpoint и HTTP тест (B)</h2>
+<p>API-то е реализирано с ASP.NET Core Minimal API (таблица 4).</p>
+
+<div class="caption"><b>Таблица 4.</b> HTTP endpoint-и</div>
+<table>
+  <tr><th style="width:9%">Метод</th><th style="width:30%">Път</th><th style="width:22%">Достъп</th><th>Отговор</th></tr>
+  <tr><td>GET</td><td><code>/api/health</code></td><td>анонимен</td><td><code>200</code>, състояние на услугата</td></tr>
+  <tr><td>GET</td><td><code>/api/exams</code></td><td>анонимен</td><td><code>200</code>, списък с изпити</td></tr>
+  <tr><td>POST</td><td><code>/api/registrations</code></td><td><code>CanRegister</code></td><td><code>202</code> + <code>Location</code> + <code>registrationId</code>; <code>400</code> при невалидни данни</td></tr>
+  <tr><td>GET</td><td><code>/api/registrations/{id}</code></td><td><code>CanRegister</code></td><td><code>200</code> или <code>404</code></td></tr>
+  <tr><td>GET</td><td><code>/api/registrations</code></td><td><code>CanViewAll</code></td><td><code>200</code>, всички заявки</td></tr>
+</table>
+
+<p>Записването връща <b>202 Accepted</b>, а не 200 или 201, защото обработката е асинхронна. Заявката е приета и предадена на
+опашката, а резултатът идва по-късно като събитие. Входните данни се проверяват в <code>RegistrationRequest.Validate()</code>:
+факултетен номер от 9 цифри, име, валиден имейл и съществуващ изпит. При грешка се връща <code>ValidationProblem</code> (листинг 2).</p>
+
+<div class="caption"><b>Листинг 2.</b> Отговор при невалидни данни</div>
+<pre>HTTP/1.1 400 Bad Request
+{"title":"One or more validation errors occurred.","status":400,
+ "errors":{"FacultyNumber":["Факултетният номер трябва да е 9 цифри."],
+           "StudentName":["Името е задължително."],
+           "StudentEmail":["Невалиден имейл адрес."],
+           "ExamId":["Няма изпит с такъв идентификатор."]}}</pre>
+
+<p>Ръчното тестване се прави с файла <code>ExamRegistration.Api.http</code>, който съдържа 7 заявки за всички сценарии. За
+автоматизираното тестване проектът <code>ExamRegistration.Api.Tests</code> стартира API-то в паметта чрез
+<code>WebApplicationFactory&lt;Program&gt;</code>. Service Bus е заменен с <code>FakePublisher</code>, така че се тества само HTTP
+слоят. Всичките 7 теста преминават успешно.</p>
+
+<h2>6. Създаване и регистриране на опашка (C)</h2>
+<p>Емулаторът не поддържа създаване на ресурси през Azure портала. Опашките и topic-ите се описват декларативно във файла
+<code>emulator/Config.json</code> и се създават при стартиране на емулатора (таблица 5).</p>
+
+<div class="caption"><b>Таблица 5.</b> Ресурси в namespace <code>sbemulatorns</code></div>
+<table>
+  <tr><th style="width:16%">Вид</th><th style="width:26%">Име</th><th>Настройки</th></tr>
+  <tr><td>Queue</td><td><code>exam-registrations</code></td><td><code>LockDuration = 30 s</code>, <code>MaxDeliveryCount = 3</code>, откриване на дубликати в прозорец 5 min, DLQ при изтичане, TTL 1 h</td></tr>
+  <tr><td>Topic</td><td><code>registration-events</code></td><td>TTL 1 h</td></tr>
+  <tr><td>Subscription</td><td><code>notifications</code></td><td>за Notifier, <code>MaxDeliveryCount = 3</code></td></tr>
+  <tr><td>Subscription</td><td><code>audit</code></td><td>за проверка на потока в тестовете</td></tr>
+</table>
+
+<p>Имената са константи в <code>Contracts/ServiceBusNames.cs</code>, за да няма разминаване между услугите. В приложението
+клиентите се регистрират в dependency injection контейнера (листинг 3). <code>ServiceBusClient</code> е singleton, защото държи
+една AMQP връзка за целия процес. Именуваният <code>ServiceBusSender</code> се получава чрез <code>IAzureClientFactory</code>.</p>
+
+<div class="caption"><b>Листинг 3.</b> Регистриране на клиента и sender-а за опашката (<code>Api/Program.cs</code>)</div>
+<pre>builder.Services.AddAzureClients(clients =&gt;
+{
+    clients.AddServiceBusClient(serviceBusConnection);
+    clients.AddClient&lt;ServiceBusSender, ServiceBusClientOptions&gt;((_, _, provider) =&gt;
+            provider.GetRequiredService&lt;ServiceBusClient&gt;()
+                    .CreateSender(ServiceBusNames.RegistrationsQueue))
+        .WithName(ServiceBusNames.RegistrationsQueue);
+});</pre>
+
+<h2>7. Логика за изпращане на съобщения (D)</h2>
+<p>Изпращането е капсулирано в класа <code>ServiceBusRegistrationPublisher</code> зад интерфейса <code>IRegistrationPublisher</code>
+(листинг 4). Интерфейсът позволява в HTTP тестовете да се използва fake реализация.</p>
+
+<div class="caption"><b>Листинг 4.</b> Изпращане на заявка в опашката</div>
+<pre>var sbMessage = new ServiceBusMessage(BinaryData.FromObjectAsJson(message))
+{
+    MessageId = message.RegistrationId.ToString(),     // откриване на дубликати
+    CorrelationId = message.RegistrationId.ToString(), // проследяване
+    ContentType = "application/json",
+    Subject = nameof(ExamRegistrationRequested)
+};
+sbMessage.ApplicationProperties["examId"] = message.ExamId;
+await _sender.SendMessageAsync(sbMessage, ct);</pre>
+
+<ul>
+  <li>Тялото е JSON, сериализиран от record-а <code>ExamRegistrationRequested</code>, който е общ договор между услугите.</li>
+  <li><code>MessageId</code> е уникален. При повторно изпращане на същото съобщение брокерът го отхвърля.</li>
+  <li><code>CorrelationId</code> позволява една заявка да се проследи през всички услуги.</li>
+  <li><code>ApplicationProperties</code> са метаданни, по които може да се филтрира, без да се чете тялото.</li>
+</ul>
+<p>Processor също изпраща съобщения: публикува <code>ExamRegistrationProcessed</code> в topic-а със свойство <code>status</code>
+със стойност <code>Accepted</code> или <code>Rejected</code>.</p>
+
+<h2>8. Логика за получаване на съобщения (E)</h2>
+<p>Получаването е реализирано в <code>RegistrationProcessorWorker</code>, който е <code>BackgroundService</code> със
+<code>ServiceBusProcessor</code> (листинг 5).</p>
+
+<div class="caption"><b>Листинг 5.</b> Създаване на processor за опашката</div>
+<pre>_processor = client.CreateProcessor(ServiceBusNames.RegistrationsQueue, new ServiceBusProcessorOptions
+{
+    AutoCompleteMessages = false,   // ръчно потвърждаване
+    MaxConcurrentCalls = 1,         // последователна обработка, коректно броене на местата
+    ReceiveMode = ServiceBusReceiveMode.PeekLock
+});
+_processor.ProcessMessageAsync += HandleMessageAsync;
+_processor.ProcessErrorAsync += HandleErrorAsync;</pre>
+
+<p>В режим PeekLock съобщението се заключва, но не се изтрива, докато услугата не го потвърди. Така нито една заявка не се
+губи при срив. Начинът на завършване зависи от резултата (таблица 6).</p>
+
+<div class="caption"><b>Таблица 6.</b> Завършване на обработката</div>
+<table>
+  <tr><th style="width:32%">Ситуация</th><th style="width:30%">Действие</th><th>Ефект</th></tr>
+  <tr><td>успешна обработка</td><td><code>CompleteMessageAsync</code></td><td>съобщението се изтрива от опашката</td></tr>
+  <tr><td>невалиден JSON (poison)</td><td><code>DeadLetterMessageAsync</code></td><td>веднага в DLQ с причина <code>InvalidPayload</code></td></tr>
+  <tr><td>временна грешка</td><td><code>AbandonMessageAsync</code></td><td>връща се в опашката; след 3 опита отива в DLQ</td></tr>
+</table>
+
+<p>Бизнес правилата са в класа <code>RegistrationValidator</code>. Той проверява дали изпитът съществува, дали срокът не е
+изтекъл, дали има свободни места и дали студентът вече не е записан. <code>NotificationWorker</code> в Notifier използва
+същия модел, но за абонамента <code>registration-events/notifications</code>, и за всяко събитие записва в лога симулиран имейл.</p>
+
+<h2>9. Authentication и Authorization (F)</h2>
+<p>Всички механизми работят офлайн, без Azure акаунт и без външен identity provider.</p>
+
+<h3>9.1. Автентикация към Service Bus</h3>
+<p>Услугите се свързват с брокера чрез <b>Shared Access Signature (SAS)</b> connection string (листинг 6). Параметърът
+<code>UseDevelopmentEmulator=true</code> указва на SDK-то да се свърже с емулатора на localhost.</p>
+
+<div class="caption"><b>Листинг 6.</b> Connection string към емулатора</div>
+<pre>Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;
+SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;</pre>
+
+<p>Стойността се чете от конфигурационната секция <code>ServiceBus</code> чрез Options pattern (листинг 7). Ако connection
+string-ът липсва, услугата отказва да стартира. Той никога не е в C# кода. Ключът на емулатора е публична стойност, затова
+е в <code>appsettings.Development.json</code>. За реална среда се подава чрез <code>dotnet user-secrets</code> или чрез
+променлива на средата <code>ServiceBus__ConnectionString</code>.</p>
+
+<div class="caption"><b>Листинг 7.</b> Валидиране на настройките при стартиране</div>
+<pre>builder.Services.AddOptions&lt;ServiceBusOptions&gt;()
+    .Bind(builder.Configuration.GetSection(ServiceBusOptions.SectionName))
+    .ValidateDataAnnotations()   // [Required] ConnectionString
+    .ValidateOnStart();</pre>
+
+<h3>9.2. Автентикация на HTTP API</h3>
+<p>API-то използва <b>JWT Bearer</b> автентикация (<code>AddAuthentication().AddJwtBearer()</code>). Издателят, аудиторията и ключът
+за подписване се четат от секцията <code>Authentication:Schemes:Bearer</code>. Токените се генерират локално с инструмента
+<code>dotnet user-jwts</code>, който е част от .NET SDK (листинг 8). Инструментът записва издателя и аудиторията в
+<code>appsettings.Development.json</code>, а ключа за подписване в user-secrets.</p>
+
+<div class="caption"><b>Листинг 8.</b> Генериране на локални токени</div>
+<pre>dotnet user-jwts create --project src/ExamRegistration.Api --name ivan.petrov \
+    --role Student --scope registrations:write -o token
+dotnet user-jwts create --project src/ExamRegistration.Api --name admin --role Admin -o token</pre>
+
+<h3>9.3. Политики за оторизация</h3>
+<p>Достъпът до endpoint-ите се контролира от две политики (листинг 9). Резултатите при различни токени са дадени в таблица 7.</p>
+
+<div class="caption"><b>Листинг 9.</b> Политики за оторизация</div>
+<pre>builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(Policies.CanRegister, policy =&gt; policy
+        .RequireAuthenticatedUser()
+        .RequireRole(Roles.Student)
+        .RequireClaim("scope", "registrations:write"))
+    .AddPolicy(Policies.CanViewAll, policy =&gt; policy
+        .RequireAuthenticatedUser()
+        .RequireRole(Roles.Admin));</pre>
+
+<div class="caption"><b>Таблица 7.</b> Резултат от оторизацията</div>
+<table>
+  <tr><th style="width:62%">Заявка</th><th>Резултат</th></tr>
+  <tr><td>POST без токен</td><td><code>401 Unauthorized</code></td></tr>
+  <tr><td>POST с токен на студент без scope <code>registrations:write</code></td><td><code>403 Forbidden</code></td></tr>
+  <tr><td>POST с токен на администратор</td><td><code>403 Forbidden</code></td></tr>
+  <tr><td>POST с токен на студент и scope</td><td><code>202 Accepted</code></td></tr>
+  <tr><td>GET <code>/api/registrations</code> със студент / с администратор</td><td><code>403</code> / <code>200</code></td></tr>
+</table>
+
+<h2>10. Подкарване на Azure Service Bus Emulator (G)</h2>
+<p>Емулаторът е Docker контейнер, който използва SQL Server като хранилище. Двата контейнера са описани в
+<code>emulator/docker-compose.yml</code> (таблица 8).</p>
+
+<div class="caption"><b>Таблица 8.</b> Контейнери на емулатора</div>
+<table>
+  <tr><th style="width:24%">Контейнер</th><th style="width:44%">Образ</th><th>Бележки</th></tr>
+  <tr><td><code>servicebus-emulator</code></td><td><code>mcr.microsoft.com/azure-messaging/servicebus-emulator</code></td><td>порт 5672 (AMQP) и 5300 (health); монтиран <code>Config.json</code></td></tr>
+  <tr><td><code>servicebus-sql</code></td><td><code>mcr.microsoft.com/mssql/server:2022-latest</code></td><td><code>linux/amd64</code>, на Apple Silicon работи през Rosetta</td></tr>
+</table>
+
+<p>Файлът <code>.env</code> съдържа <code>ACCEPT_EULA=Y</code>, паролата на SQL Server и времето за изчакване на базата. Стартирането
+и проверката са показани в листинг 10.</p>
+
+<div class="caption"><b>Листинг 10.</b> Стартиране на емулатора</div>
+<pre>cd emulator
+docker compose up -d
+docker logs servicebus-emulator
+
+Emulator Service is Launching On Platform:CBL-Mariner/Linux,Arm64
+Emulator Service is Successfully Up! ; Use connection string: "Endpoint=sb://localhost;..."</pre>
+
+<p>Емулаторът се спира с <code>docker compose down</code>.</p>
+
+<h2>11. Тест чрез Azure Service Bus Emulator (H)</h2>
+
+<h3>11.1. Автоматизирани интеграционни тестове</h3>
+<p>Проектът <code>ExamRegistration.IntegrationTests</code> работи срещу реалния емулатор, без заместване на Service Bus. Класът
+<code>EmulatorFixture</code> стартира <code>RegistrationProcessorWorker</code> в процеса на теста и чете резултатите от абонамента
+<code>audit</code> (таблица 9). Всичките 4 теста преминават успешно.</p>
+
+<div class="caption"><b>Таблица 9.</b> Интеграционни тестове</div>
+<table>
+  <tr><th style="width:46%">Тест</th><th>Какво проверява</th></tr>
+  <tr><td><code>ApiPost_FlowsThroughQueueAndTopic_Accepted</code></td><td>HTTP POST с JWT → опашка → Processor → topic → <code>audit</code> със статус Accepted</td></tr>
+  <tr><td><code>ExpiredDeadline_IsRejected</code></td><td>изпит с изтекъл срок → Rejected</td></tr>
+  <tr><td><code>DuplicateStudent_SecondRegistrationIsRejected</code></td><td>втора заявка на същия студент → Rejected</td></tr>
+  <tr><td><code>PoisonMessage_GoesToDeadLetterQueue</code></td><td>невалидно тяло → съобщението е в DLQ с причина <code>InvalidPayload</code></td></tr>
+</table>
+
+<h3>11.2. Ръчна демонстрация</h3>
+<p>Системата се стартира с <code>./run-all.sh</code>. От файла <code>.http</code> се изпращат заявки: един студент два пъти за
+изпита PRS-2026-01, един студент за изпит с изтекъл срок и трима студенти за изпит OOP-2026-01 с капацитет 2. Резултатът в
+логовете на услугите е показан в листинг 11.</p>
+
+<div class="caption"><b>Листинг 11.</b> Логове на услугите при демонстрацията</div>
+<pre>[Api]       Sent registration 6dec741f-... for exam PRS-2026-01 to queue exam-registrations
+[Processor] Registration 6dec741f-... (121221001 -&gt; PRS-2026-01): Accepted
+[Processor] Registration 614182cf-... (121221001 -&gt; PRS-2026-01): Rejected Студентът вече е записан за този изпит.
+[Processor] Registration dc5962cc-... (121221002 -&gt; MATH-2025-09): Rejected Срокът за записване изтече на 01.09.2025.
+[Notifier]  EMAIL to ivan@tu-sofia.bg | Успешно сте записан(а) за изпит PRS-2026-01.
+[Notifier]  EMAIL to a@tu-sofia.bg    | Успешно сте записан(а) за изпит OOP-2026-01.
+[Notifier]  EMAIL to b@tu-sofia.bg    | Успешно сте записан(а) за изпит OOP-2026-01.
+[Notifier]  EMAIL to c@tu-sofia.bg    | Записването за изпит OOP-2026-01 е отказано: Няма свободни места (капацитет 2).</pre>
+
+<p>Слабата свързаност е проверена със следния опит. Notifier се спира, изпращат се заявки и после Notifier се стартира отново.
+Съобщенията са чакали в абонамента <code>notifications</code> и се обработват веднага след стартирането. Нито едно не се губи.</p>
+
+<h2>12. Изводи</h2>
+<p>Реализирана е система от три микроуслуги, които комуникират само чрез Azure Service Bus. Използвани са двата основни модела
+на MOM: опашка за заявките и topic с абонаменти за резултатите. Приложени са механизмите за надеждна доставка: потвърждаване
+в режим PeekLock, повторни опити, dead-letter опашка и откриване на дубликати.</p>
+<p>Azure Service Bus Emulator позволява цялата система да се разработи и тества офлайн, включително с автоматизирани
+интеграционни тестове. Преминаването към реален Azure Service Bus изисква само смяна на connection string-а, без промяна на кода.</p>
+<p>Възможни разширения: Managed Identity и RBAC вместо SAS при реален Azure; база данни вместо състояние в паметта; сесии
+(<code>RequiresSession</code>) за подредба на съобщенията по студент; API Gateway пред услугите.</p>
+
+<h2>13. Приложение: компилиране и стартиране</h2>
+<p>Изисквания: .NET SDK 8 и Docker Desktop. Командите са дадени в листинг 12.</p>
+
+<div class="caption"><b>Листинг 12.</b> Стартиране и тестване</div>
+<pre># емулатор + трите услуги
+./run-all.sh
+
+# HTTP тестове (без емулатор)
+dotnet test tests/ExamRegistration.Api.Tests
+
+# интеграционни тестове (с работещ емулатор)
+cd emulator &amp;&amp; docker compose up -d &amp;&amp; cd ..
+dotnet test tests/ExamRegistration.IntegrationTests
+
+# PDF на документацията
+./scripts/build-docs.sh</pre>
+
+<div class="caption"><b>Таблица 10.</b> Структура на хранилището</div>
+<table>
+  <tr><th style="width:40%">Път</th><th>Съдържание</th></tr>
+  <tr><td><code>emulator/</code></td><td><code>docker-compose.yml</code>, <code>Config.json</code>, <code>.env</code></td></tr>
+  <tr><td><code>src/</code></td><td>Contracts, Api, Processor, Notifier</td></tr>
+  <tr><td><code>tests/</code></td><td>HTTP и интеграционни тестове</td></tr>
+  <tr><td><code>docs/</code></td><td>документация (HTML → PDF) и фигури</td></tr>
+  <tr><td><code>scripts/build-docs.sh</code></td><td>генериране на PDF</td></tr>
+  <tr><td><code>run-all.sh</code></td><td>стартиране на цялата система</td></tr>
+</table>
+
+</body>
+</html>
