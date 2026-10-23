@@ -1,0 +1,45 @@
+### HTTP тестове за ExamRegistration.Api (VS Code REST Client / Rider / Visual Studio)
+# Токени се генерират локално (офлайн):
+#   dotnet user-jwts create --project src/ExamRegistration.Api --name ivan.petrov --role Student --scope registrations:write -o token
+#   dotnet user-jwts create --project src/ExamRegistration.Api --name admin --role Admin -o token
+
+@host = http://localhost:5080
+@studentToken = PASTE_STUDENT_TOKEN
+@adminToken = PASTE_ADMIN_TOKEN
+
+### 1. Health check (анонимен) -> 200
+GET {{host}}/api/health
+
+### 2. Списък с изпити (анонимен) -> 200
+GET {{host}}/api/exams
+
+### 3. Записване без токен -> 401 Unauthorized
+POST {{host}}/api/registrations
+Content-Type: application/json
+
+{ "facultyNumber": "121221001", "studentName": "Иван Петров", "studentEmail": "ivan@tu-sofia.bg", "examId": "PRS-2026-01" }
+
+### 4. Записване с валиден токен на студент -> 202 Accepted
+POST {{host}}/api/registrations
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{ "facultyNumber": "121221001", "studentName": "Иван Петров", "studentEmail": "ivan@tu-sofia.bg", "examId": "PRS-2026-01" }
+
+### 5. Невалидни данни -> 400 ValidationProblem
+POST {{host}}/api/registrations
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{ "facultyNumber": "12", "studentName": "", "studentEmail": "not-an-email", "examId": "NOPE" }
+
+### 6. Изпит с изтекъл срок -> 202, но Processor го отказва (виж лога на Notifier)
+POST {{host}}/api/registrations
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{ "facultyNumber": "121221002", "studentName": "Мария Иванова", "studentEmail": "maria@tu-sofia.bg", "examId": "MATH-2025-09" }
+
+### 7. Всички заявки - само Admin -> 200 (със студентски токен -> 403)
+GET {{host}}/api/registrations
+Authorization: Bearer {{adminToken}}
